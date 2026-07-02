@@ -134,6 +134,16 @@ mark{background:var(--badge-bg);color:var(--badge-fg);padding:0 2px;border-radiu
 .searchbar input:focus{border-color:var(--accent);}
 .searchbar .clr{position:absolute;right:11px;top:50%;transform:translateY(-50%);border:none;background:none;font-size:23px;color:var(--sub);cursor:pointer;display:none;}
 .chips{display:flex;flex-wrap:wrap;gap:8px;}
+.recentrow{display:flex;gap:7px;overflow-x:auto;padding-bottom:4px;-webkit-overflow-scrolling:touch;scrollbar-width:none;}
+.recentrow::-webkit-scrollbar{display:none;}
+.recentrow .chip{flex-shrink:0;white-space:nowrap;}
+.chip.clr-recent{color:var(--sub);border-style:dashed;}
+.fchips{display:flex;gap:7px;overflow-x:auto;padding:2px 0 10px;margin-bottom:4px;scrollbar-width:none;}
+.fchips::-webkit-scrollbar{display:none;}
+.fchip{flex-shrink:0;white-space:nowrap;background:var(--card);border:1.5px solid var(--line);border-radius:20px;padding:7px 14px;font-size:13.5px;font-weight:700;color:var(--sub);cursor:pointer;}
+.fchip.on{background:var(--accent);border-color:var(--accent);color:var(--call-fg);}
+.weblinks{margin-top:14px;padding-top:12px;border-top:1px dashed var(--line);display:flex;flex-direction:column;gap:8px;}
+.weblbl{font-size:12px;color:var(--sub);margin-bottom:2px;}
 .chip{background:var(--chip);border:1px solid var(--line);border-radius:22px;padding:8px 14px;font-size:14px;color:var(--accent-d);cursor:pointer;font-weight:600;}
 .set-g{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px;margin-bottom:14px;box-shadow:var(--shadow);}
 .set-g h3{font-size:14px;margin:0 0 12px;color:var(--sub);font-weight:800;}
@@ -239,7 +249,7 @@ function renderHome(){
  h+='</div>';
  view.innerHTML=h;
  const inp=$('#q');
- inp.addEventListener('input',e=>{state.q=e.target.value;homeSearch();});
+ inp.addEventListener('input',e=>{state.q=e.target.value;state.sf='all';homeSearch();});
  $('#clr').onclick=()=>{state.q='';inp.value='';homeSearch();inp.focus();};
 }
 function homeSearch(){
@@ -405,7 +415,7 @@ function togfav(id){favs=favs.includes(id)?favs.filter(x=>x!==id):[id,...favs];s
 function renderSearch(){
  view.innerHTML='<div class="section"><div class="searchbar"><input id="q" type="search" placeholder="예: 여권, 주차, 감사관, 내선 8230, 담당자 이름" autocomplete="off" value="'+esc(state.q)+'"><button class="clr" id="clr">&times;</button></div><div id="res"></div></div>';
  const inp=$('#q');inp.focus();
- inp.addEventListener('input',e=>{state.q=e.target.value;doSearch();});
+ inp.addEventListener('input',e=>{state.q=e.target.value;state.sf='all';doSearch();});
  $('#clr').onclick=()=>{state.q='';inp.value='';doSearch();inp.focus();};
  doSearch();
 }
@@ -427,48 +437,77 @@ function sect(arr,label,render,cap){cap=cap||60;if(!arr.length)return '';
  return `<div class="grp">${esc(label)} · ${arr.length}건</div>`+arr.slice(0,cap).map(render).join('')+extra;}
 function doSearch(){
  const res=$('#res'),q=state.q.trim();$('#clr').style.display=q?'block':'none';
- if(!q){res.innerHTML='<div class="lbl">최근 검색</div><div class="chips">'+(recent.length?recent.slice(0,8).map(x=>`<span class="chip" onclick="setq(this.textContent)">${esc(x)}</span>`).join(''):'<span class="muted">부서명·민원·담당자 이름·내선번호로 검색하세요</span>')+'</div>';return;}
+ if(!q){res.innerHTML='<div class="lbl">최근 검색</div><div class="recentrow">'+(recent.length?recent.slice(0,6).map(x=>`<span class="chip" onclick="setq('${esc(x).replace(/'/g,"")}')">${esc(x)}</span>`).join('')+'<span class="chip clr-recent" onclick="clearRecent()">✕ 지우기</span>':'<span class="muted">부서·민원·담당자 이름·내선번호로 검색하세요</span>')+'</div>';return;}
  if(!STAFF_IDX)STAFF_IDX=buildStaffIndex();
  const toks=q.toLowerCase().split(/\s+/).filter(Boolean);
  const allIn=s=>{s=(s||'').toLowerCase();return toks.every(t=>s.includes(t));};
  const qd=digitsOf(q),numQ=qd.length>=3&&!/[가-힣a-z]/i.test(q);
  const q2=encodeURIComponent(q);
- let h='';
+ const F=state.sf||'all';  // 검색 필터
+ // 각 종류별 결과 수집
+ const R={};
  if(numQ){
-  // 내선/전화번호 검색: 담당자 → 부서 대표전화 → 업무협조
-  const st=STAFF_IDX.filter(s=>digitsOf(s.tel).includes(qd));
-  const dt=DATA.filter(r=>r.t==='부서'&&digitsOf(r.tel).includes(qd));
-  const ct=DATA.filter(r=>r.t==='업무협조'&&digitsOf(r.tel).includes(qd));
-  h+=sect(st,'담당자 (내선·전화)',staffCard);
-  h+=sect(dt,'부서 (대표전화)',deptCard);
-  h+=sect(ct,'업무협조 전화',orgCard);
- }
- if(!h){
-  // 텍스트 우선순위: ①부서 이름 ②담당자 이름 ③민원 안내 ④부서 업무 ⑤생활·무인 ⑥업무협조 ⑦기관·청사·봉사
+  R.staff=STAFF_IDX.filter(s=>digitsOf(s.tel).includes(qd));
+  R.dept=DATA.filter(r=>r.t==='부서'&&digitsOf(r.tel).includes(qd));
+  R.coop=DATA.filter(r=>r.t==='업무협조'&&digitsOf(r.tel).includes(qd));
+ }else{
   const deptName=DATA.filter(r=>r.t==='부서'&&allIn(r.title));
   const nameIds=new Set(deptName.map(r=>r.id));
   const staffName=STAFF_IDX.filter(s=>s.name&&allIn(s.pos+' '+s.name+' '+s.dept));
   const snKeys=new Set(staffName.map(s=>s.deptId+'|'+s.pos+'|'+s.name));
   const staffWork=STAFF_IDX.filter(s=>s.work&&allIn(s.work)&&!snKeys.has(s.deptId+'|'+s.pos+'|'+s.name));
-  const minwon=DATA.filter(r=>r.t==='민원안내'&&allIn(r.search));
-  const deptWork=DATA.filter(r=>r.t==='부서'&&!nameIds.has(r.id)&&allIn(r.search));
-  const life=DATA.filter(r=>['생활안내','무인발급기'].includes(r.t)&&allIn(r.search));
-  const coop=DATA.filter(r=>r.t==='업무협조'&&allIn(r.search));
-  const org=DATA.filter(r=>r.t==='기관시설'&&allIn(r.search));
-  h+=sect(deptName,'부서 — 이름 일치',deptCard);
-  h+=sect(staffName,'담당자 — 이름 일치',staffCard,40);
-  h+=sect(staffWork,'담당자 — 업무 일치',staffCard,40);
-  h+=sect(minwon,'민원 안내',infoCard);
-  h+=sect(deptWork,'부서 — 업무 일치',deptCard);
-  h+=sect(life,'생활 민원·무인발급',infoCard);
-  h+=sect(coop,'업무협조',orgCard);
-  h+=sect(org,'기관·청사·자원봉사',orgCard);
+  R.dept=deptName;R.deptwork=DATA.filter(r=>r.t==='부서'&&!nameIds.has(r.id)&&allIn(r.search));
+  R.staff=staffName;R.staffwork=staffWork;
+  R.minwon=DATA.filter(r=>r.t==='민원안내'&&allIn(r.search));
+  R.life=DATA.filter(r=>['생활안내','무인발급기'].includes(r.t)&&allIn(r.search));
+  R.coop=DATA.filter(r=>r.t==='업무협조'&&allIn(r.search));
+  R.org=DATA.filter(r=>r.t==='기관시설'&&allIn(r.search));
  }
- if(!h){res.innerHTML=`<div class="empty">"${esc(q)}" 결과가 없어요.</div><a class="web" href="https://search.naver.com/search.naver?query=${q2}" target="_blank" rel="noopener">🌐 인터넷에서 찾기</a>`;return;}
- res.innerHTML=h+`<a class="web" href="https://search.naver.com/search.naver?query=${q2}" target="_blank" rel="noopener">🌐 인터넷에서 더 찾기</a>`;
- if(q.length>1){recent=[q,...recent.filter(x=>x!==q)].slice(0,12);sv('recent',recent);}
+ // 필터 칩 정의: [키, 라벨, 포함그룹]
+ const FILT=[['all','전체',null],['minwon','민원',['minwon']],['dept','부서',['dept','deptwork']],
+  ['staff','담당자',['staff','staffwork']],['life','생활·발급',['life']],['org','기관·청사',['org','coop']]];
+ const cnt=g=>(R[g]||[]).length;
+ const fcount=inc=>inc?inc.reduce((a,g)=>a+cnt(g),0):Object.keys(R).reduce((a,g)=>a+cnt(g),0);
+ let chips=FILT.filter(f=>f[0]==='all'||fcount(f[2])>0).map(f=>{
+  const n=fcount(f[2]);const on=F===f[0];
+  return `<span class="fchip${on?' on':''}" onclick="setSF('${f[0]}')">${f[1]}${f[0]!=='all'?' '+n:''}</span>`;}).join('');
+ // 결과 렌더 (필터 적용)
+ const showG=g=>{const f=FILT.find(x=>x[0]===F);return F==='all'||(f[2]&&f[2].includes(g));};
+ let h='';
+ if(showG('staff')&&numQ)h+=sect(R.staff,'담당자 (내선·전화)',staffCard,40);
+ if(showG('dept')&&numQ)h+=sect(R.dept,'부서 (대표전화)',deptCard);
+ if(showG('coop')&&numQ)h+=sect(R.coop,'업무협조 전화',orgCard);
+ if(!numQ){
+  if(showG('dept'))h+=sect(R.dept,'부서 — 이름 일치',deptCard);
+  if(showG('staff'))h+=sect(R.staff,'담당자 — 이름 일치',staffCard,40);
+  if(showG('staffwork'))h+=sect(R.staffwork,'담당자 — 업무 일치',staffCard,40);
+  if(showG('minwon'))h+=sect(R.minwon,'민원 안내',infoCard);
+  if(showG('deptwork'))h+=sect(R.deptwork,'부서 — 업무 일치',deptCard);
+  if(showG('life'))h+=sect(R.life,'생활 민원·무인발급',infoCard);
+  if(showG('coop'))h+=sect(R.coop,'업무협조',orgCard);
+  if(showG('org'))h+=sect(R.org,'기관·청사·자원봉사',orgCard);
+ }
+ const chipbar=`<div class="fchips">${chips}</div>`;
+ if(!h){
+  res.innerHTML=chipbar+`<div class="empty">"${esc(q)}" 결과가 없어요.</div>`+webLinks(q,q2);
+  saveRecent(q);return;}
+ res.innerHTML=chipbar+h+webLinks(q,q2);
+ saveRecent(q);
 }
-function setq(q){state.q=q;renderSearch();}
+// 검색어 성격에 맞는 외부 사이트 버튼 (어수선한 네이버 대신 목적지 제시)
+function webLinks(q,q2){
+ const isMinwon=/증명|발급|등본|초본|여권|신고|등록|민원|수수료|과태료|세금|주민|가족관계|인감/.test(q);
+ const isPlace=/역|공원|청사|주소|위치|길|지도|병원|주차/.test(q);
+ let btns=[];
+ if(isMinwon)btns.push(`<a class="web gov" href="https://www.gov.kr/search?srhQuery=${q2}" target="_blank" rel="noopener">🏛️ 정부24에서 찾기</a>`);
+ if(isPlace)btns.push(`<a class="web map" href="https://map.naver.com/p/search/${q2}" target="_blank" rel="noopener">🗺️ 지도에서 찾기</a>`);
+ btns.push(`<a class="web" href="https://search.naver.com/search.naver?query=${q2}" target="_blank" rel="noopener">🌐 인터넷 검색</a>`);
+ return `<div class="weblinks"><div class="weblbl">앱에 없는 정보는 여기서 ↓</div>${btns.join('')}</div>`;
+}
+function setSF(f){state.sf=f;doSearch();}
+function clearRecent(){recent=[];sv('recent',recent);doSearch();}
+function saveRecent(q){if(!q||q.length<2)return;recent=[q,...recent.filter(x=>x!==q)].slice(0,10);sv('recent',recent);}
+function setq(q){state.q=q;state.sf='all';renderSearch();}
 function renderSettings(){
  const th=document.body.dataset.theme,sz=document.body.dataset.size;
  const deptN=DATA.filter(r=>r.t==='부서').length,staffN=DATA.filter(r=>r.t==='부서').reduce((a,r)=>a+((r.staff&&r.staff.length)||0),0);
