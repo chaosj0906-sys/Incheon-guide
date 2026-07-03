@@ -238,6 +238,7 @@ const cnt={dept:DATA.filter(r=>r.t==='부서'&&r.src==='현행').length,minwon:D
  floor:DATA.filter(r=>r.t==='부서'&&r.building&&r.floor).length};
 const QUICK=['여권','등본','무인발급기','주차','민원실','인감','자동차 등록','세금'];
 function renderHome(){
+ state.q='';state.sf='all';  // 홈에 오면 검색어 자동 비움
  let h='<div class="section"><div class="searchbar home"><input id="q" type="search" placeholder="🔎 부서·민원·담당자·내선번호 바로 검색" autocomplete="off"><button class="clr" id="clr" style="display:none">&times;</button></div>';
  h+='<div class="chips qchips">'+QUICK.map(x=>`<span class="chip" onclick="homeQuick('${x}')">${x}</span>`).join('')+'</div>';
  h+='<div id="res"></div></div>';
@@ -464,7 +465,7 @@ function doSearch(){
   R.org=DATA.filter(r=>r.t==='기관시설'&&allIn(r.search));
  }
  // 필터 칩 정의: [키, 라벨, 포함그룹]
- const FILT=[['all','전체',null],['minwon','민원',['minwon']],['dept','부서',['dept','deptwork']],
+ const FILT=[['all','전체',null],['dept','부서',['dept','deptwork']],['minwon','민원',['minwon']],
   ['staff','담당자',['staff','staffwork']],['life','생활·발급',['life']],['org','기관·청사',['org','coop']]];
  const cnt=g=>(R[g]||[]).length;
  const fcount=inc=>inc?inc.reduce((a,g)=>a+cnt(g),0):Object.keys(R).reduce((a,g)=>a+cnt(g),0);
@@ -479,9 +480,9 @@ function doSearch(){
  if(showG('coop')&&numQ)h+=sect(R.coop,'업무협조 전화',orgCard);
  if(!numQ){
   if(showG('dept'))h+=sect(R.dept,'부서 — 이름 일치',deptCard);
+  if(showG('minwon'))h+=sect(R.minwon,'민원 안내',infoCard);
   if(showG('staff'))h+=sect(R.staff,'담당자 — 이름 일치',staffCard,40);
   if(showG('staffwork'))h+=sect(R.staffwork,'담당자 — 업무 일치',staffCard,40);
-  if(showG('minwon'))h+=sect(R.minwon,'민원 안내',infoCard);
   if(showG('deptwork'))h+=sect(R.deptwork,'부서 — 업무 일치',deptCard);
   if(showG('life'))h+=sect(R.life,'생활 민원·무인발급',infoCard);
   if(showG('coop'))h+=sect(R.coop,'업무협조',orgCard);
