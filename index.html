@@ -20,7 +20,7 @@ body[data-size="xl"]{--fs:20.5px;--ft:22px;--fd:29px;--ff:20px;--fc:21px;}
 html,body{margin:0;padding:0;background:var(--bg);color:var(--ink);
  font-family:'Pretendard','Apple SD Gothic Neo','Malgun Gothic','맑은 고딕',-apple-system,sans-serif;
  font-size:var(--fs);line-height:1.55;-webkit-text-size-adjust:100%;}
-.wrap{max-width:560px;margin:0 auto;min-height:100vh;padding-bottom:76px;}
+.wrap{max-width:560px;margin:0 auto;min-height:100vh;min-height:100dvh;padding-bottom:76px;}
 header{position:relative;background:linear-gradient(120deg,#0e1c52,#1A63B8);color:#fff;
  padding:14px 16px calc(13px + env(safe-area-inset-top,0)) 16px;display:flex;align-items:center;gap:13px;overflow:hidden;}
 header::before{content:"";position:absolute;top:-25%;right:-10%;width:54%;height:175%;background:linear-gradient(135deg,#7d1850,#cf1c7d);transform:skewX(-20deg);transform-origin:top right;opacity:.85;z-index:0;}
@@ -84,6 +84,30 @@ header::after{content:"";position:absolute;left:0;right:0;bottom:0;height:1px;ba
 .callmulti{flex-shrink:0;display:flex;flex-direction:column;gap:5px;align-items:stretch;}
 .callpill{display:flex;align-items:center;justify-content:center;gap:5px;background:var(--accent);color:var(--call-fg);text-decoration:none;border-radius:11px;padding:8px 12px;font-size:13px;font-weight:800;white-space:nowrap;}
 .callpill:active{background:var(--accent-d);}
+/* 담당자 바텀시트 (지도앱 방식) */
+.sheet-wrap{position:fixed;top:0;left:0;right:0;bottom:0;z-index:100;display:flex;align-items:flex-end;justify-content:center;
+ background:rgba(10,18,35,0);transition:background .25s ease;}
+.sheet-wrap.open{background:rgba(10,18,35,.42);}
+.sheet-panel{width:100%;max-width:560px;background:var(--card);color:var(--ink);
+ border-radius:20px 20px 0 0;box-shadow:0 -6px 28px rgba(20,37,80,.28);
+ padding:8px 18px calc(20px + env(safe-area-inset-bottom,0));
+ transform:translateY(100%);transition:transform .26s cubic-bezier(.32,.72,0,1);}
+.sheet-wrap.open .sheet-panel{transform:translateY(0);}
+.sheet-handle{width:40px;height:4px;border-radius:3px;background:var(--line);margin:4px auto 12px;
+ cursor:grab;touch-action:none;}
+.sheet-badge{display:inline-block;font-size:11.5px;font-weight:800;color:var(--badge-fg);
+ background:var(--badge-bg);border-radius:8px;padding:2px 8px;margin-bottom:8px;}
+.sheet-name{font-size:20px;font-weight:800;letter-spacing:-.4px;line-height:1.25;}
+.sheet-dept{font-size:14px;color:var(--sub);margin-top:5px;display:flex;gap:5px;align-items:baseline;}
+.sheet-work{font-size:13.5px;color:var(--txt2);margin-top:10px;line-height:1.55;
+ background:var(--bg);border-radius:12px;padding:10px 12px;}
+.sheet-acts{display:flex;flex-direction:column;gap:9px;margin-top:16px;}
+.sheet-call{display:flex;align-items:center;justify-content:center;gap:7px;background:var(--accent);
+ color:var(--call-fg);text-decoration:none;border-radius:13px;padding:13px;font-size:16px;font-weight:800;}
+.sheet-call:active{background:var(--accent-d);}
+.sheet-open{display:flex;align-items:center;justify-content:center;gap:7px;background:var(--chip);
+ color:var(--accent-d);border:0;border-radius:13px;padding:13px;font-size:15px;font-weight:800;cursor:pointer;}
+.sheet-none{font-size:13px;color:var(--sub);text-align:center;padding:11px;}
 .c-loc{font-size:calc(var(--ff) - 1px);margin-top:8px;color:var(--txt2);display:flex;gap:6px;}
 .c-loc .pin{color:var(--accent);}
 .c-body{font-size:calc(var(--ff) - .5px);margin-top:4px;color:var(--txt2);line-height:1.62;white-space:pre-line;}
@@ -266,9 +290,70 @@ document.querySelectorAll('#nav button').forEach(b=>b.onclick=()=>go(b.dataset.t
 function open_(v){state.view=v;state.sub=null;state.detail=null;history.pushState({o:1},'');render();}
 function sub(s){state.sub=s;history.pushState({s:1},'');render();}
 function openDetail(id){state.detail=id;history.pushState({d:1},'');render();}
-window.onpopstate=()=>{if(state.detail!=null){state.detail=null;render();}else if(state.sub){state.sub=null;render();}else if(!TABS.includes(state.view)){state.view='home';render();}};
+window.onpopstate=()=>{if(sheetIdx!=null){hideSheet();return;}if(state.detail!=null){state.detail=null;render();}else if(state.sub){state.sub=null;render();}else if(!TABS.includes(state.view)){state.view='home';render();}};
+
+// ── 담당자 바텀시트 (검색결과에서 사람이 주인공) ──
+let sheetIdx=null;
+function openStaff(si){
+ if(sheetIdx!=null||!STAFF_IDX||!STAFF_IDX[si])return;
+ sheetIdx=si;
+ history.pushState({sheet:1},'');
+ renderSheet(STAFF_IDX[si]);
+}
+function renderSheet(s){
+ const call=s.tel
+   ? callBig(s.tel).replace(/class="callbtn"/g,'class="sheet-call"')
+   : '<div class="sheet-none">등록된 전화번호가 없습니다</div>';
+ const deptLine=`🏢 ${esc(s.dept)}${s.deptSub&&s.deptSub!==s.dept?' <span class="muted">· '+esc(s.deptSub)+'</span>':''}`;
+ const html=`<div class="sheet-wrap" id="sheet"><div class="sheet-panel" id="sheetPanel">`+
+   `<div class="sheet-handle" id="sheetHandle"></div>`+
+   (s.pos?`<span class="sheet-badge">${esc(s.pos)}</span>`:'')+
+   `<div class="sheet-name">${esc(s.name||s.pos||'담당자')}</div>`+
+   `<div class="sheet-dept">${deptLine}</div>`+
+   (s.work?`<div class="sheet-work">${esc(s.work)}</div>`:'')+
+   `<div class="sheet-acts">${call}`+
+   `<button class="sheet-open" onclick="staffToDept(${s.deptId})">🏢 이 부서 전체보기</button></div>`+
+   `</div></div>`;
+ document.body.insertAdjacentHTML('beforeend',html);
+ const wrap=$('#sheet');
+ requestAnimationFrame(()=>wrap.classList.add('open'));
+ // 배경 탭 → 닫기
+ wrap.addEventListener('click',e=>{if(e.target===wrap)closeSheetUI();});
+ // 손잡이 아래로 스와이프 → 닫기 (지도앱 방식)
+ attachSwipe($('#sheetPanel'),$('#sheetHandle'));
+}
+function hideSheet(){
+ const w=$('#sheet');sheetIdx=null;
+ if(w){w.classList.remove('open');setTimeout(()=>{if(w.parentNode)w.remove();},280);}
+}
+function closeSheetUI(){if(sheetIdx!=null)history.back();}   // popstate가 hideSheet 실행
+function staffToDept(deptId){
+ const w=$('#sheet');if(w){w.classList.remove('open');setTimeout(()=>{if(w.parentNode)w.remove();},280);}
+ sheetIdx=null;state.detail=deptId;history.replaceState({d:1},'');render();  // 시트 기록을 상세로 치환
+}
+function attachSwipe(panel,handle){
+ // Pointer Events로 통일 — iOS Safari(13+)·Android Chrome 공통 동작, 마우스/터치 이중발생·리스너누수 없음
+ let sy=0,dy=0,drag=false,pid=null;
+ handle.addEventListener('pointerdown',e=>{
+   drag=true;pid=e.pointerId;sy=e.clientY;dy=0;panel.style.transition='none';
+   try{handle.setPointerCapture(pid);}catch(_){}
+ });
+ handle.addEventListener('pointermove',e=>{
+   if(!drag||e.pointerId!==pid)return;
+   dy=e.clientY-sy;if(dy<0)dy=0;panel.style.transform='translateY('+dy+'px)';
+ });
+ const up=e=>{
+   if(!drag)return;drag=false;
+   try{handle.releasePointerCapture(pid);}catch(_){}
+   panel.style.transition='';
+   if(dy>90){panel.style.transform='';closeSheetUI();}else panel.style.transform='translateY(0)';
+ };
+ handle.addEventListener('pointerup',up);
+ handle.addEventListener('pointercancel',up);
+}
 
 function render(){
+ if(sheetIdx!=null){const w=$('#sheet');if(w&&w.parentNode)w.remove();sheetIdx=null;}
  document.querySelectorAll('#nav button').forEach(b=>b.classList.toggle('on',b.dataset.tab===state.view&&state.detail==null));
  if(state.detail!=null)return renderDetail(state.detail);
  const v=state.view;
@@ -474,12 +559,12 @@ function renderSearch(){
 function digitsOf(s){return (s||'').replace(/[^0-9]/g,'');}
 let STAFF_IDX=null;
 function buildStaffIndex(){const idx=[];DATA.forEach(r=>{if(r.t==='부서'&&r.staff)r.staff.forEach(s=>{
-  idx.push({name:s.name||'',pos:s.pos||'',tel:s.tel||'',work:s.work||'',dept:r.title,deptId:r.id,deptSub:r.sub||''});});});return idx;}
+  idx.push({si:idx.length,name:s.name||'',pos:s.pos||'',tel:s.tel||'',work:s.work||'',dept:r.title,deptId:r.id,deptSub:r.sub||''});});});return idx;}
 function hlq(text){let t=esc(text||'');const q=(state.q||'').trim();if(!q)return t;
  const toks=q.toLowerCase().split(/\s+/).filter(x=>x&&!/^\d+$/.test(x));
  toks.forEach(tk=>{try{t=t.replace(new RegExp('('+tk.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+')','ig'),'<mark>$1</mark>');}catch(e){}});return t;}
 function staffCard(s){const td=digitsOf(s.tel);
- return `<div class="card tap" onclick="openDetail(${s.deptId})"><div class="c-tt" style="font-size:15px">${esc(s.pos)}${s.name?' '+esc(s.name):''}</div>`+
+ return `<div class="card tap" onclick="openStaff(${s.si})"><div class="c-tt" style="font-size:15px">${esc(s.pos)}${s.name?' '+esc(s.name):''}</div>`+
   `<div class="c-sub">🏢 ${esc(s.dept)}${s.deptSub&&s.deptSub!==s.dept?' · '+esc(s.deptSub):''}</div>`+
   (s.work?`<div class="c-body" style="font-size:13px">${hlq(s.work)}</div>`:'')+
   (s.tel?`<div class="inlineacts"><a class="ia-call" href="tel:${td}" onclick="event.stopPropagation()">📞 ${esc(s.tel)}</a></div>`:'')+`</div>`;}
